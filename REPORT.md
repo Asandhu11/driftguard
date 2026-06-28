@@ -83,13 +83,48 @@ DriftGuard's contribution is to integrate these three capabilities into a single
 ## 3. Method
 
 ### 3.1 Pipeline Overview
-*[draft pending]*
+
+DriftGuard wraps three stages around any embedding-based log anomaly detector. The base detector used in this work is a feed-forward autoencoder trained on parsed log-template count vectors. The three stages added on top operate on the detector's outputs and latent representations:
+
+- **Stage 1 — Drift detection.** A reference window of latent embeddings is stored at training time. For each new detection window over the test stream, the squared Maximum Mean Discrepancy (MMD²) between the window's embeddings and the reference is computed. A threshold derived from a permutation test on the training embeddings (no labels) flags windows as drifted.
+
+- **Stage 2 — Adaptation.** When drift is detected, the autoencoder is fine-tuned on a mixture of low-reconstruction-error windows from the drifted region ("drifted normal" candidates) and a replay buffer of samples from the original training set.
+
+- **Stage 3 — Disambiguation.** Each detection window receives two additional features: the slope of MMD over a short sliding window (temporal sharpness) and the Shannon entropy of the template-count distribution within the window (template localization). Together with MMD magnitude, these features separate drift events from attack events.
+
+The pipeline is designed to be modular: each stage has a defined input/output contract and can be evaluated independently, which is how the experimental results in Section 5 are structured.
 
 ### 3.2 Base Autoencoder
-*[draft pending]*
 
-### 3.3 Stage 1: Label-Free Drift Detection
-*[draft pending]*
+The base detector is a feed-forward autoencoder with a symmetric encoder-decoder structure. Given an input count vector of dimension *d*, the architecture is *d* → *h₁* → *h₂* → *latent* → *h₂* → *h₁* → *d*, with ReLU activations between linear layers and no activation on the final output layer. Hidden layer sizes scale with input dimension to keep the parameter count proportional to the feature dimensionality:
+
+| Input dim *d* | (*h₁*, *h₂*, latent) |
+|---|---|
+| < 100 | (32, 16, 8) |
+| 100 – 1000 | (128, 32, 16) |
+| ≥ 1000 | (256, 64, 16) |
+
+Inputs are normalized with log1p transformation (log(1+x) elementwise) before training. This compresses heavy-tailed template counts — common in log data, where a handful of templates dominate — without distorting zero-valued entries. The autoencoder is trained on normal sessions only using Adam (learning rate 1e-3, batch size 256) for 20 epochs, minimizing mean squared error.
+
+At inference time, an input's anomaly score is its mean squared reconstruction error across the *d* output dimensions. Anomalous inputs, having distributions unseen during training, reconstruct poorly and receive higher scores.
+
+### 3.3 Stage 1 — Label-Free Drift Detection
+
+Stage 1 detects whether the distribution of incoming logs has drifted from the training distribution, **using no labeled anomalies at any point**. The construction has three components.
+
+**Latent representations.** After training, the encoder is frozen and used to compute latent embeddings *z* ∈ ℝᵏ for every input in both the training set and the test stream. Operating in the encoder's latent space rather than the raw input space concentrates distribution differences along the directions the model considers semantically meaningful, and reduces the cost of kernel computations (latent dimension is 8 or 16 versus 47–1822 in raw counts).
+
+**MMD with RBF kernel.** Given two sets of latent embeddings *X* = {*x₁*, …, *x_m*} and *Y* = {*y₁*, …, *y_n*}, the unbiased squared MMD with RBF kernel *k(x, y) = exp(-‖x − y‖² / σ²)* is
+
+> MMD²(X, Y) = (1 / m(m−1)) Σᵢ≠ⱼ k(xᵢ, xⱼ) + (1 / n(n−1)) Σᵢ≠ⱼ k(yᵢ, yⱼ) − (2 / mn) Σᵢⱼ k(xᵢ, yⱼ)
+
+MMD² is non-negative; values near zero indicate the two samples could plausibly come from the same distribution, while large values indicate distributional difference. The RBF bandwidth σ² is set by the **median heuristic** — σ² equals the median squared pairwise distance among training embeddings — which is the standard well-behaved default for this kernel.
+
+**Threshold calibration via permutation test.** To detect drift without labels, a detection threshold is required that controls the false-alarm rate under "no drift." We construct an empirical null distribution by repeatedly drawing two disjoint random subsets from the training embeddings — one of size *m* (matching the reference) and one of size *n* (matching the detection window) — and computing MMD² between them. This null distribution captures the variability of MMD² under the null hypothesis that both samples come from the same (training) distribution. The detection threshold is the (1 − α) quantile of this null distribution, with α = 0.01 in our experiments. Under no drift, we expect at most α = 1% false alarms by construction.
+
+**Sustained-drift criterion.** A single threshold crossing can be triggered by transient noise or anomaly-induced spikes. To filter these out, we require *K* consecutive detection windows to exceed the threshold before declaring sustained drift. We use *K* = 3 throughout this work.
+
+**Detection.** At inference time, a reference window is fixed (in our experiments, the last *m* = 500 training embeddings — the most recent representation of normal at training time). A detection window of size *n* = 500 slides over the test embeddings with stride 100. At each step, MMD² between the current window and the reference is computed; if the value exceeds the threshold for *K* consecutive steps, sustained drift is reported. The label-free property — no anomaly labels touched in either threshold calibration or scoring — is the core contribution of Stage 1.
 
 ### 3.4 Stage 2: Selective Replay-Based Adaptation
 *[draft pending]*
