@@ -281,7 +281,35 @@ This is not a refutation of the disambiguator. The (slope, entropy) feature pair
 
 ## 6. Discussion
 
-*[draft pending]*
+The experimental results raise three points worth examining further: a concrete safety implication of Stage 2's behavior, the dataset-dependence of Stage 3's localization signal, and several methodological limitations that bound the claims of this work.
+
+**Stage 2's contamination risk motivates Stage 3 gating.** The candidate-fraction sweep in Section 5.3 shows that the largest adaptation gains on BGL are achieved by including substantial numbers of labeled anomalies as "drifted normal" candidates. From the model's perspective these candidates are simply the windows it currently reconstructs well; it has no way to know they are anomalous. In a deployed system without labels, an automated drift-adaptation routine would silently fine-tune on these windows and gradually treat their patterns as normal — the system would learn to ignore the very events it was deployed to detect. This is not a hypothetical failure: it is what the F1/AUC gains in Table 2 measure. Stage 3 is therefore not optional refinement; in a deployed pipeline it must gate Stage 2, declining adaptation when the disambiguator classifies a high-MMD region as attack-like. Implementing this gating loop end-to-end (Stage 1 detects → Stage 3 classifies → Stage 2 adapts only if drift) is the most natural follow-up to this work.
+
+**Localization is dataset-dependent.** Section 5.4 documented that template entropy on BGL correlates positively with attack content (+0.82), opposite the direction predicted in the proposal. BGL's labeled events are cascading internal failures involving many subsystems; attacks in other deployments may concentrate on a narrow endpoint or service, restoring the proposal's original direction. The disambiguator's discriminative power does not depend on the sign convention; what depends on the system is the *threshold rule* that consumes the entropy feature. We expect that in any deployment a small calibration set — even a handful of labeled examples of known attacks versus known drift periods — would suffice to fix the sign. This calibration step is the only place in the pipeline that touches labels, and only ever a small number of them.
+
+**Limitations.**
+
+- *Single drift dataset.* All drift results in this report come from BGL. Generalization claims would be stronger with at least one additional time-ordered dataset; Thunderbird is the natural choice and is the planned next step.
+
+- *Drain template count.* The 1,822 templates extracted by Drain3 on BGL is higher than the manually curated count (~376) reported in the LogPai analysis. This inflates the input dimensionality and likely contributes to the count-vector autoencoder's modest BGL performance. Tuning `sim_th` upward would reduce the template count at the cost of some message-variant conflation; we did not explore this systematically.
+
+- *LSTM baseline scoring.* As discussed in Section 5.1, our DeepLog-style LSTM uses mean cross-entropy scoring rather than the top-K matching of the original DeepLog paper. The LSTM numbers in Table 1 therefore underestimate what a properly tuned DeepLog would achieve. This is a fair limitation of the baseline reporting, not of the DriftGuard contributions.
+
+- *Static drift-onset estimate for Stage 2.* The drift onset index used for the Stage 2 split (test index 3500) was read off the Stage 1 plot rather than determined algorithmically. A production implementation would use the first sustained-drift-flag location from Stage 1 directly; the static value used here was sufficient for demonstrating the adaptation behavior but would need to be replaced for online operation.
+
+- *Reconstruction-based scoring inherits the count-vector limitation.* Count vectors discard template ordering. Sequence-based detectors (DeepLog, LogBERT) capture ordering but were not the focus of this work. DriftGuard's Stages 1–3 are architecturally agnostic to the base detector — they consume only latent embeddings and reconstruction errors — so coupling them to a sequence-based backbone is a clean next experiment.
+
+**Future work.** The most immediate refinements are (a) implementing the end-to-end gating loop in which Stage 3 controls when Stage 2 fires, (b) running the full pipeline on Thunderbird to demonstrate cross-dataset generalization of the methodology, (c) tuning Drain3's similarity threshold to bring the BGL template count in line with the published number and re-running all experiments, and (d) substituting a sequence-based detector for the count-vector autoencoder. None of these change the core methodology; they refine and stress-test the contribution.
+
+---
+
+## 7. Conclusion
+
+This report presented **DriftGuard**, a three-stage pipeline for unsupervised log anomaly detection that explicitly addresses concept drift in time-ordered log streams. Stage 1 detects distribution shift in the autoencoder's latent space using Maximum Mean Discrepancy with a permutation-test threshold, requiring no labeled anomalies. Stage 2 selectively fine-tunes the autoencoder on the drifted region with a replay buffer drawn from the original training data. Stage 3 separates drift events from attack events using two per-window features (MMD slope and template entropy) computed on high-MMD detection windows.
+
+Three experimental findings ground the contribution. First, label-free drift detection on autoencoder embeddings is feasible: on BGL, MMD cleanly identifies sustained drift, including drift periods that contain no labeled anomalies, while the HDFS control produces zero false alarms. Second, the dominant lever in Stage 2 is not replay buffer size — which is essentially inactive at the model and fine-tuning scales explored — but candidate selection. The strongest adaptation gains on BGL come from including windows that are partially contaminated with labeled anomalies, surfacing a concrete safety failure mode that adaptation without disambiguation would have. Third, on BGL the template-entropy localization signal is strong (+0.82 correlation with anomaly content) but inverted relative to the original proposal hypothesis, which is itself a finding worth reporting: the sign of the localization rule is dataset-dependent and requires a small calibration step in deployment.
+
+Taken together, the three stages form a single integrated pipeline that addresses a gap in the recent log AD literature — label-free drift detection, selective adaptation, and drift-vs-attack disambiguation handled together, for security log streams. Code, plots, and all numerical results are available at https://github.com/Asandhu11/driftguard.
 
 ---
 
