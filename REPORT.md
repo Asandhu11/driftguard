@@ -196,10 +196,41 @@ All experiments are run with random seed 42 for reproducibility.
 ## 5. Results
 
 ### 5.1 Static Baselines Establish the Gap
-*[draft pending]*
+
+Before evaluating DriftGuard, we measure the two static baselines (count-vector autoencoder and DeepLog-style LSTM) on both datasets. These results establish the regime in which the drift-aware contributions of DriftGuard are needed.
+
+**Table 1.** Static baseline performance on HDFS and BGL.
+
+| Model | HDFS AUC | HDFS F1 | BGL AUC | BGL F1 |
+|---|---|---|---|---|
+| Count-vector AE | 0.9999 | 0.9973 | 0.7354 | 0.3467 |
+| DeepLog-style LSTM | 0.6169 | 0.6700 | 0.6065 | 0.2822 |
+
+The HDFS result for the count-vector autoencoder (AUC 0.9999, F1 0.9973) exceeds the published DeepLog F1 of approximately 0.96 (Du et al., 2017). This is not a methodological breakthrough; it is a property of the HDFS_v1 dataset. The reconstruction-error histogram (Figure 1a) shows essentially non-overlapping distributions for normal and anomalous sessions, with two orders of magnitude separation between their means. The cause is that HDFS anomalies almost always involve specific "rare error templates" (for example, *"writeBlock received exception"*) that never occur in normal sessions, making them trivially separable in a count-vector representation. Recent surveys (Landauer et al., 2023; AIOps for log anomaly detection in the era of LLMs, 2025) explicitly describe HDFS as saturated for this reason.
+
+On BGL, the count-vector autoencoder drops to AUC 0.7354 / F1 0.3467 (Figure 1b). This is the realistic regime: count vectors lose the temporal *ordering* of templates, and BGL anomalies are largely order-based (legitimate-looking templates occurring in unusual sequences) rather than rare-template-based.
+
+The DeepLog-style LSTM underperforms the count-vector autoencoder on HDFS (F1 0.67 vs. 0.997) and barely changes on BGL (F1 0.28). On HDFS, the LSTM cannot exploit rare templates as effectively as the count-vector AE because its scoring is averaged over many predictions. On BGL, the LSTM does not improve over the count-vector AE because of our scoring choice: we use mean cross-entropy across each window, while the original DeepLog uses top-K matching (a discrete count of positions where the actual next template falls outside the top-K predictions). Mean cross-entropy dilutes the signal — a single highly surprising transition gets averaged across dozens of normal ones. We did not implement top-K matching, accepting the weaker LSTM scoring in exchange for spending time on the project's actual contribution: drift-aware extensions to the autoencoder.
+
+**Implication for DriftGuard.** The combination of (a) a strong, simple autoencoder baseline on count vectors and (b) a clear gap on the time-ordered BGL dataset is exactly the regime that motivates drift-aware methods. The remainder of Section 5 evaluates whether DriftGuard's three stages close this gap.
+
+**Figure 1.** Reconstruction-error histograms for the count-vector autoencoder. (a) HDFS: normal and anomalous error distributions are widely separated (see `results/hdfs_recon_error_histogram.png`). (b) BGL: distributions overlap substantially (see `results/bgl_recon_error_histogram.png`).
 
 ### 5.2 Stage 1 — Label-Free Drift Detection
-*[draft pending]*
+
+Stage 1 evaluates whether MMD on autoencoder latent embeddings detects distribution shift in the test stream without using any labeled anomalies.
+
+**HDFS control.** When the random-split HDFS test set is fed through Stage 1, MMD remains below the calibrated threshold across all 1,280 detection windows (Figure 2a). The raw alarm count is **zero**, and consequently the sustained-alarm count (*K* = 3 consecutive crossings) is also zero. This is the expected null result: HDFS is not time-ordered, so a randomized 80/20 split produces train and test embeddings drawn from the same distribution. The absence of false alarms on this control validates the threshold-calibration procedure: under no drift, MMD does not spuriously fire.
+
+**BGL.** On BGL's time-ordered test stream (Figure 2b), Stage 1 detects substantial drift. Out of 90 detection windows, 78 exceed the threshold (raw alarm rate 86.7%); applying the sustained-drift criterion of *K* = 3 consecutive crossings does not reduce this count, indicating that the alarms form long contiguous blocks rather than isolated spikes. The first drift alarm fires at test index 300; the MMD signal remains elevated throughout most of the remainder of the test stream. The correlation between MMD and the true per-window anomaly fraction is +0.42.
+
+Two qualitative features of the BGL MMD curve are worth highlighting (visible in Figure 2b):
+
+1. **Drift detected without anomalies.** Two MMD spikes — around indices 500–1100 and 2000–2500 — occur when the true anomaly fraction in the corresponding test windows is essentially zero. This demonstrates that MMD captures distribution shift that the anomaly labels do not, validating the label-free framing.
+
+2. **Sustained drift after anomalies end.** A large rise in MMD occurs around index 3500 alongside a burst of labeled anomalies. The anomalies fade by index 5000–7000, but MMD remains elevated through the end of the test stream. Drift persists after the anomaly burst is over, demonstrating that drift and attacks are distinct signals on the same time series — directly motivating Stage 3.
+
+**Figure 2.** Stage 1 drift detection. (a) HDFS control: MMD remains below threshold; zero alarms (see `results/hdfs_mmd_drift.png`). (b) BGL: MMD curve with sustained alarms, plus per-window true anomaly fraction below (see `results/bgl_mmd_drift.png`). Note that the early MMD spikes correspond to windows with zero anomalies.
 
 ### 5.3 Stage 2 — Adaptation Tradeoff
 *[draft pending]*
