@@ -126,11 +126,33 @@ MMD² is non-negative; values near zero indicate the two samples could plausibly
 
 **Detection.** At inference time, a reference window is fixed (in our experiments, the last *m* = 500 training embeddings — the most recent representation of normal at training time). A detection window of size *n* = 500 slides over the test embeddings with stride 100. At each step, MMD² between the current window and the reference is computed; if the value exceeds the threshold for *K* consecutive steps, sustained drift is reported. The label-free property — no anomaly labels touched in either threshold calibration or scoring — is the core contribution of Stage 1.
 
-### 3.4 Stage 2: Selective Replay-Based Adaptation
-*[draft pending]*
+### 3.4 Stage 2 — Selective Replay-Based Adaptation
 
-### 3.5 Stage 3: Drift vs. Attack Disambiguation
-*[draft pending]*
+When Stage 1 reports sustained drift, Stage 2 fine-tunes the autoencoder so that subsequent reconstruction-error scores reflect the new normal — without forgetting the old normal. The adaptation procedure has three components.
+
+**Candidate selection.** Within the drift region, we score each window with the *current* (un-adapted) autoencoder and keep the windows with the lowest reconstruction errors as "drifted normal" candidates. The intuition is that windows the current model already scores as relatively normal are the safest to use for fine-tuning: they reflect drift in benign system behavior rather than security events. We control this with a `candidate_frac` parameter that selects the bottom *k* fraction by reconstruction error.
+
+**Replay buffer.** To resist catastrophic forgetting of the original normal distribution, we draw a random sample from the original training set as a replay buffer. The buffer size is controlled by a `replay_mult` parameter: replay size equals `replay_mult` × (number of drifted-normal candidates). Setting `replay_mult` to zero disables replay entirely; large values anchor the model heavily to the pre-drift normal.
+
+**Fine-tuning.** The drifted-normal candidates and the replay buffer are concatenated into a mixed adaptation set. The autoencoder is fine-tuned on this set with Adam at a small learning rate (1e-4, one order of magnitude smaller than the original training rate of 1e-3) for a small number of epochs. The small step size and limited epoch count are deliberate: aggressive fine-tuning would absorb drift quickly but would also forget more of the pre-drift distribution. This is the canonical plasticity-stability tradeoff.
+
+**Operating-point evaluation.** We evaluate the adapted model on three disjoint slices of the test set: a **pre-drift slice** (test windows before the drift onset, used to measure forgetting), a **drift held-out slice** (drift-region windows not used for adaptation, used to measure post-adaptation generalization), and the **full test set**. We report ROC-AUC and best-threshold F1 on each slice. A successful adaptation increases drift held-out F1 without measurably decreasing pre-drift F1.
+
+### 3.5 Stage 3 — Drift vs. Attack Disambiguation
+
+Stages 1 and 2 alone do not distinguish drift from attack: an anomaly-rich region of the test stream looks like drift to MMD, and Stage 2 will adapt to it — silently absorbing attacks into the model's notion of normal. Stage 3 provides the missing signal: when a detection window has a high MMD score, two additional features classify the event as drift-like or attack-like before any adaptation is performed.
+
+**Feature 1: MMD slope.** Drift is by definition gradual — distributions shift over many windows. Attacks are sharp — a sudden burst of unusual log activity. We capture this by computing the slope of the MMD time series over a short context of *K_s* = 5 detection windows, using ordinary least squares fit to (window-index, MMD²) pairs. A small slope indicates a sustained level (drift); a steep positive slope indicates a sharp rise (attack).
+
+**Feature 2: Template entropy.** For each detection window, we compute the Shannon entropy of the aggregated template-count distribution within that window:
+
+> *H(window)* = −Σᵢ pᵢ log pᵢ
+
+where *pᵢ* is the empirical probability of template *i* (count of template *i* divided by total counts in the window). The hypothesis informing the original proposal was that attacks would have *low* entropy (a narrow set of templates dominates, e.g., a single attacker hitting a single endpoint) and drift would have *high* entropy (system evolution affects many templates).
+
+**Empirical inversion on BGL.** On the BGL dataset, this hypothesis is inverted (Section 5.4). BGL's labeled anomalies correspond to cascading supercomputer failures that involve many subsystems simultaneously — TLB errors, ECC memory faults, kernel exceptions, and network alerts often co-occur. Such cascading events produce *high* template entropy, while the smaller drift-only events involve narrower, system-internal template usage. The disambiguator still works, but the localization rule must be calibrated to the failure mode of the system being monitored. Section 5.4 quantifies this and discusses the implications for deployment.
+
+**Disambiguation rule.** For each detection window with MMD² above the Stage 1 threshold, we treat the window's (slope, entropy) pair as a feature vector. A simple threshold rule — drift if entropy is low *and* slope is small, attack otherwise (with thresholds calibrated per-system) — gates the response. In the experiments we report the empirical relationship between (slope, entropy) and ground-truth anomaly fraction rather than fixing a specific decision rule, which keeps the disambiguator open to alternative calibrations as more data becomes available.
 
 ---
 
