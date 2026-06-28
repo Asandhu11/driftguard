@@ -1,0 +1,16 @@
+HDFS DeepLog-style LSTM
+=======================================================
+Context k:   10
+Embed dim:   32
+Hidden dim:  64
+Vocab size:  48
+Train pairs: 2,000,000
+Test seqs:   115,013 (3,347 anomalous)
+Epochs:      5
+Train time:  227.4s
+
+Metrics:
+  ROC-AUC:    0.6169
+  Best F1:    0.6700
+  Precision:  0.8007
+  Recall:     0.5760

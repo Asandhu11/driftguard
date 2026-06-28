@@ -1,0 +1,14 @@
+BGL Autoencoder Anomaly Detection
+=======================================================
+Train:        33,699 normal samples
+Test:         9,427 (816 anomalous, 8.66%)
+Input dim:    1822
+Architecture: 1822 -> 256 -> 64 -> 16 -> 64 -> 256 -> 1822
+Epochs:       20
+
+Metrics:
+  ROC-AUC:    0.7354
+  Best F1:    0.3467
+  Precision:  0.4857
+  Recall:     0.2696
+  Threshold:  0.017521

@@ -1,0 +1,16 @@
+BGL DeepLog-style LSTM
+=======================================================
+Context k:   10
+Embed dim:   32
+Hidden dim:  64
+Vocab size:  1823
+Train pairs: 2,000,000
+Test seqs:   9,427 (816 anomalous)
+Epochs:      5
+Train time:  291.8s
+
+Metrics:
+  ROC-AUC:    0.6065
+  Best F1:    0.2822
+  Precision:  0.1652
+  Recall:     0.9681

@@ -1,0 +1,14 @@
+HDFS MMD drift detection (Stage 1 of DriftGuard)
+============================================================
+Reference size:        500
+Detection window size: 500
+Stride:                100
+Bandwidth sigma^2:     2.9069
+Permutations:          200
+Target false alarm:    0.01
+Threshold:             6.2387e-03
+
+Detection windows: 1280
+Alarms:            0  (0.00%)
+First drift idx:   never
+Corr(MMD, anomaly frac): +0.419

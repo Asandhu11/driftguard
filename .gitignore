@@ -1,0 +1,25 @@
+﻿# Virtual environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Datasets and derived files (large; not source code)
+data/HDFS_v1/
+data/BGL/
+data/*.csv
+data/*.npz
+data/*.zip
+
+# Model checkpoints (large; can be regenerated)
+results/*.pt
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor settings
+.vscode/
+.idea/

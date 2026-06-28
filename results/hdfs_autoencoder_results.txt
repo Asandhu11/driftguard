@@ -1,0 +1,14 @@
+HDFS Autoencoder Anomaly Detection
+=======================================================
+Train:        446,578 normal samples
+Test:         128,483 (16,838 anomalous, 13.11%)
+Input dim:    47
+Architecture: 47 -> 32 -> 16 -> 8 -> 16 -> 32 -> 47
+Epochs:       20
+
+Metrics:
+  ROC-AUC:    0.9999
+  Best F1:    0.9973
+  Precision:  0.9951
+  Recall:     0.9995
+  Threshold:  0.001190
