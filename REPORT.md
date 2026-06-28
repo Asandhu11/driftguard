@@ -233,10 +233,49 @@ Two qualitative features of the BGL MMD curve are worth highlighting (visible in
 **Figure 2.** Stage 1 drift detection. (a) HDFS control: MMD remains below threshold; zero alarms (see `results/hdfs_mmd_drift.png`). (b) BGL: MMD curve with sustained alarms, plus per-window true anomaly fraction below (see `results/bgl_mmd_drift.png`). Note that the early MMD spikes correspond to windows with zero anomalies.
 
 ### 5.3 Stage 2 — Adaptation Tradeoff
-*[draft pending]*
+
+Stage 2 fine-tunes the autoencoder on a mixture of drifted-normal candidates and a replay buffer. We evaluate the adapted model on three slices defined in Section 3.4: pre-drift (test windows before the drift onset), drift held-out (drift-region windows not used for adaptation), and full test.
+
+We initially expected adaptation to surface a clean plasticity-stability tradeoff controlled by the **replay multiplier** — the ratio of replay-buffer size to drifted-normal candidate count. We swept `replay_mult` ∈ {0, 0.5, 1, 2, 3, 5} at three fine-tuning intensities (5, 10, and 20 epochs). To our surprise, **replay-multiplier had no measurable effect on outcomes** across the entire sweep (Figure 3a). Pre-drift F1 remained at 0.81–0.83, drift held-out F1 at 0.42–0.47, and pre-drift AUC at 0.996 across all settings. At the model scale used here (~970,000 parameters for BGL) and the small fine-tuning footprint (~700 candidates, lr 1e-4, 5–20 epochs), the model simply does not move enough for replay-buffer size to matter.
+
+This led us to identify the actual operative lever: **candidate selection**. We swept `candidate_frac` ∈ {0.1, 0.2, 0.3, 0.5, 0.7, 0.9} with replay multiplier and epochs fixed (Figure 3b, Table 2).
+
+**Table 2.** BGL Stage 2 results across `candidate_frac` (replay_mult=1.0, epochs=10).
+
+| candidate_frac | # kept | contamination | pre F1 | drift F1 | drift AUC |
+|---|---|---|---|---|---|
+| 0.1 | 237 | 0.0% | 0.822 | 0.415 | 0.597 |
+| 0.2 | 474 | 0.0% | 0.835 | 0.415 | 0.596 |
+| 0.3 | 711 | 4.5% | 0.809 | 0.467 | 0.537 |
+| 0.5 | 1,185 | 6.7% | 0.776 | 0.464 | 0.545 |
+| 0.7 | 1,659 | 21.2% | 0.776 | **0.535** | **0.895** |
+| 0.9 | 2,133 | 16.9% | 0.760 | 0.536 | 0.898 |
+
+The pre-adaptation baseline F1 is 0.41 on the drift held-out slice. At `candidate_frac` = 0.7, adaptation lifts drift held-out F1 to 0.535 and drift AUC from 0.60 to 0.90 — a substantial ranking improvement on the drifted region. Pre-drift F1 drops from 0.82 to 0.76; pre-drift AUC remains essentially unchanged at 0.996, indicating that the underlying ranking on pre-drift normal is preserved (the F1 drop comes from the best-threshold shifting, not from genuine degradation of the model's ability to distinguish pre-drift normal from anomaly).
+
+**The uncomfortable result.** The largest adaptation gains occur at `candidate_frac` ≥ 0.7, where the contamination column shows that 21% of the candidates the model is fine-tuning on are *actually labeled anomalies*. Adaptation does not so much "learn the new normal" as **absorb anomalies into the model's notion of normal**. From an evaluation standpoint this looks like an improvement; from a deployed-system standpoint it is exactly the failure mode that motivates Stage 3. Without gating, Stage 2 will silently adapt away the very alerts the system exists to raise.
+
+This is empirically the strongest single finding of this report: drift-aware adaptation, applied naively, is dangerous. The gating provided by Stage 3 is not optional refinement — it is necessary for safe deployment.
+
+**Figure 3.** Stage 2 sweeps. (a) `replay_mult` sweep at 10 epochs: curves are flat (see `results/bgl_stage2_sweep.png`). (b) `candidate_frac` sweep at fixed replay and epochs: drift F1 rises with candidate fraction but tracks contamination (see `results/bgl_stage2_candsweep.png`).
 
 ### 5.4 Stage 3 — Drift vs. Attack Disambiguation
-*[draft pending]*
+
+Stage 3 computes two per-window features — MMD slope and template entropy — for every detection window and asks whether they can be used to separate drift-like events from attack-like events without using labels.
+
+On the 78 high-MMD windows in the BGL test stream, the correlation between **template entropy** and the true per-window anomaly fraction is **+0.82** — a strong signal. The correlation between **MMD slope** and the anomaly fraction is **+0.245** — a weaker but consistent signal in the expected direction (steeper rises track attacks). Together these features carry substantial discriminative information.
+
+Figure 4 (the bottom-right panel of `results/bgl_disambiguate.png`) plots each high-MMD window in (slope, entropy) space, colored by its true anomaly fraction. Two distinct clusters are visually evident:
+
+1. **Low-entropy / low-slope cluster** (entropy < 1.0, slope near zero): dominantly blue (low anomaly fraction). These are pure-drift events — the system's template usage shifted in narrow patterns without involving labeled failures.
+
+2. **High-entropy / positive-slope cluster** (entropy > 2.0, slope > 0.05): dominantly red (high anomaly fraction). These are attack events — cascading supercomputer failures that involve many subsystems simultaneously and produce sharp MMD rises.
+
+**The inverted hypothesis.** The original proposal predicted attacks would have *low* template entropy (a single attacker concentrating on a narrow endpoint). On BGL the relationship is inverted: attacks have *high* entropy. The reason is BGL-specific — its labeled anomalies are not external intrusions but internal cascading failures, where one subsystem failure triggers logging in many others. CPU TLB errors, ECC memory faults, kernel exceptions, and network alerts often co-occur, so an attack window contains many templates.
+
+This is not a refutation of the disambiguator. The (slope, entropy) feature pair clearly separates drift from attack on BGL with a +0.82 entropy correlation — the disambiguator works. What is dataset-dependent is the *sign* of the entropy axis: in deployments where attacks correspond to narrow concentrated activity (e.g., a single endpoint being probed), the proposal's original direction would hold. The implication for deployment is that the threshold rule should be calibrated per-system using a small labeled calibration set drawn from the early operating period, before the disambiguator is used to gate Stage 2.
+
+**Figure 4.** Stage 3 disambiguator on BGL high-MMD windows. The (slope, entropy) scatter shows clean separation between pure-drift events (low entropy, low slope) and attack events (high entropy, positive slope). Per-window features are in `results/bgl_disambiguate.csv`; the four-panel diagnostic plot is in `results/bgl_disambiguate.png`.
 
 ---
 
