@@ -313,12 +313,43 @@ Taken together, the three stages form a single integrated pipeline that addresse
 
 ---
 
-## 7. Conclusion
 
-*[draft pending]*
+## Abstract
 
----
+Machine-learning-based log anomaly detection has become a standard tool for surfacing security incidents and operational failures in modern infrastructures, but deployed models degrade silently under concept drift: as the system being monitored evolves, the model's notion of "normal" no longer matches reality, producing both false positives on legitimate change and missed detections on genuine threats. Most existing log anomaly detectors assume a stationary distribution of normal behavior, require labeled anomalies to calibrate detection thresholds, and cannot distinguish whether a detected deviation reflects benign drift (the model should adapt) or an attack (the system should alert).
+
+This report presents **DriftGuard**, a three-stage pipeline that addresses these three problems together for unsupervised log anomaly detection. Stage 1 detects drift in the latent space of a base autoencoder using Maximum Mean Discrepancy with a permutation-test threshold, requiring no labeled anomalies. Stage 2 fine-tunes the autoencoder on a mixture of low-reconstruction-error "drifted normal" candidates and a replay buffer drawn from the original training set. Stage 3 classifies each high-MMD detection window as drift-like or attack-like using two per-window features — MMD slope (temporal sharpness) and template entropy (localization).
+
+Experiments on HDFS_v1 and BGL surface three findings. First, label-free drift detection works: on BGL, MMD identifies sustained drift cleanly, including periods that contain no labeled anomalies, while on the HDFS control it produces zero false alarms. Second, the dominant lever for adaptation is candidate selection, not replay buffer size; aggressive candidate selection improves drift-region F1 from 0.41 to 0.54, but only by including ~21% labeled anomalies in the candidate set — empirically demonstrating that drift adaptation without gating silently absorbs attacks as normal. Third, template entropy correlates strongly (+0.82) with attack content on BGL but with the opposite sign from the proposal's initial hypothesis, indicating that the localization rule is dataset-dependent and requires per-system calibration. The contribution is the integration of these three capabilities into a single pipeline tailored to security log streams; to the best of our knowledge, no prior published method addresses all three problems together for this setting.
+
+Code, plots, and numerical results: https://github.com/Asandhu11/driftguard
 
 ## References
 
-*[Will be compiled at the end.]*
+1. Du, M., Li, F., Zheng, G., & Srikumar, V. (2017). *DeepLog: Anomaly Detection and Diagnosis from System Logs through Deep Learning.* Proceedings of the 2017 ACM SIGSAC Conference on Computer and Communications Security (CCS '17), pp. 1285–1298.
+
+2. Meng, W., Liu, Y., Zhu, Y., Zhang, S., Pei, D., et al. (2019). *LogAnomaly: Unsupervised Detection of Sequential and Quantitative Anomalies in Unstructured Logs.* Proceedings of the Twenty-Eighth International Joint Conference on Artificial Intelligence (IJCAI 2019), pp. 4739–4745.
+
+3. Guo, H., Yuan, S., & Wu, X. (2021). *LogBERT: Log Anomaly Detection via BERT.* International Joint Conference on Neural Networks (IJCNN 2021).
+
+4. He, P., Zhu, J., Zheng, Z., & Lyu, M. R. (2017). *Drain: An Online Log Parsing Approach with Fixed Depth Tree.* IEEE International Conference on Web Services (ICWS 2017), pp. 33–40.
+
+5. He, S., Zhu, J., He, P., & Lyu, M. R. (2016). *Experience Report: System Log Analysis for Anomaly Detection.* IEEE International Symposium on Software Reliability Engineering (ISSRE 2016), pp. 207–218.
+
+6. Zhu, J., He, S., He, P., Liu, J., & Lyu, M. R. (2023). *LogHub: A Large Collection of System Log Datasets for AI-driven Log Analytics.* IEEE International Symposium on Software Reliability Engineering (ISSRE 2023).
+
+7. Landauer, M., Onder, S., Skopik, F., & Wurzenberger, M. (2023). *Deep learning for anomaly detection in log data: A survey.* Machine Learning with Applications, Vol. 12, 100470.
+
+8. Hinder, F., Vaquet, V., & Hammer, B. (2024). *One or two things we know about concept drift — a survey on monitoring in evolving environments. Part A: Detecting Concept Drift.* Frontiers in Artificial Intelligence, Vol. 7, 1330257.
+
+9. Gretton, A., Borgwardt, K. M., Rasch, M. J., Schölkopf, B., & Smola, A. (2012). *A Kernel Two-Sample Test.* Journal of Machine Learning Research, Vol. 13, pp. 723–773.
+
+10. Greco, S., Vacchetti, B., Apiletti, D., & Cerquitelli, T. (2024). *Unsupervised concept drift detection from deep learning representations in real-time (DriftLens).* arXiv:2406.17813.
+
+11. Li, J., et al. (2024). *Unsupervised incremental learning with dual concept drift detection for identifying anomalous sequences (VAE4AS).* arXiv:2403.03576.
+
+12. Wang, Y., Mäntylä, M. V., Nyyssölä, J., Ping, K., & Wang, L. (2024). *CroSysLog: Cross-system Software Log-based Anomaly Detection Using Meta-learning.* IEEE International Conference on Software Analysis, Evolution and Reengineering (SANER 2025).
+
+13. *AIOps for log anomaly detection in the era of LLMs: A systematic literature review.* (2025). Information and Software Technology.
+
+14. Tuor, A., Kaplan, S., Hutchinson, B., Nichols, N., & Robinson, S. (2017). *Deep Learning for Unsupervised Insider Threat Detection in Structured Cybersecurity Data Streams.* arXiv:1710.00811.
