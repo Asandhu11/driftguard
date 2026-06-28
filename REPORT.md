@@ -159,16 +159,37 @@ where *pᵢ* is the empirical probability of template *i* (count of template *i*
 ## 4. Experimental Setup
 
 ### 4.1 Datasets
-*[draft pending]*
+
+Two public benchmarks from the LogHub repository (Zhu et al., 2023) are used.
+
+**HDFS_v1** consists of approximately 11.2 million log lines from a Hadoop Distributed File System cluster, with 575,061 block-level sessions labeled normal or anomalous via a separate `anomaly_label.csv` file. The anomaly rate is 2.93% (16,838 anomalous sessions). HDFS_v1 is not time-ordered in any meaningful sense — block IDs are independent and sessions can be reordered without changing the problem — and is widely regarded in the recent literature as a saturated benchmark on which simple methods already achieve near-perfect performance. We use HDFS_v1 in this report as (a) a saturated reference to demonstrate that the base autoencoder is working correctly, and (b) a non-time-ordered control for the drift detector: under a random train/test split, MMD should detect no drift.
+
+**BGL** consists of approximately 4.7 million log lines from the Blue Gene/L supercomputer at Lawrence Livermore National Laboratory, spanning seven months (June 2005 to April 2006). Each log line carries a real timestamp and a per-line alert label, with about 7.4% of lines labeled as alert events. BGL is genuinely time-ordered, which makes it the appropriate testbed for drift experiments: the system's failure patterns and software stack evolved over the seven-month window. We group consecutive lines into non-overlapping windows of 100 lines (following the standard DeepLog / LogBERT convention), yielding 47,135 windows with a window-level anomaly rate of 10.24% (a window is anomalous if it contains at least one anomaly line).
 
 ### 4.2 Log Parsing and Feature Construction
-*[draft pending]*
+
+Raw log lines are parsed into structured templates using **Drain3** (a maintained implementation of Drain, He et al. 2017). Drain extracts log templates by replacing variable parts (e.g., timestamps, IP addresses, block IDs) with wildcards, reducing millions of unique log lines to a small set of recurring patterns. With default Drain3 settings, HDFS_v1 yields 47 unique templates and BGL yields 1,822 templates.
+
+The 1,822-template count on BGL is higher than the manually curated count of ~376 templates reported in the LogPai analysis (Zhu et al., 2023). This is due to Drain3's default similarity threshold splitting some semantically similar messages into separate templates. Tuning `sim_th` upward from its default 0.4 to ~0.5 would reduce this count, at the cost of conflating some message variants. We note this as a refinement opportunity but use default settings throughout to keep results comparable to the LogHub reference distribution.
+
+Each session (HDFS) or 100-line window (BGL) is converted into a **count vector** of dimension equal to the template universe (47 for HDFS, 1,822 for BGL): entry *i* counts the occurrences of template *i* in the session/window. Count vectors lose template *ordering* information, which is a known limitation discussed in Section 5.1. Inputs are log1p-normalized (Section 3.2) before being fed to the autoencoder.
 
 ### 4.3 Train/Test Splits
-*[draft pending]*
+
+**HDFS** is split randomly: 80% of normal sessions go into the training pool (446,578 sessions) and the remainder, together with all anomalous sessions, into the test set (128,483 sessions; test anomaly rate 13.11%). Because HDFS has no time structure, a random split is appropriate.
+
+**BGL uses a strict time-ordered split:** the first 80% of windows in chronological order form the training pool (37,708 windows), and the last 20% form the test set (9,427 windows). Of the 37,708 training-pool windows, the 33,699 labeled normal are kept for training; anomalous training-pool windows are discarded (semi-supervised setup — the autoencoder learns "normal" only). The test set contains 8,611 normal and 816 anomalous windows (test anomaly rate 8.66%). The time-ordered split is essential for the drift experiments: it preserves the natural distribution shift between early and late BGL.
 
 ### 4.4 Baselines and Metrics
-*[draft pending]*
+
+Two baseline detectors are evaluated alongside the DriftGuard-augmented autoencoder:
+
+- **Count-vector autoencoder (CV-AE).** The base autoencoder described in Section 3.2, evaluated without any DriftGuard stages.
+- **DeepLog-style LSTM.** A from-scratch reimplementation of next-template prediction (Du et al., 2017): an embedding layer (size 32) feeds into a single-layer LSTM (hidden size 64); the last hidden state predicts the next template via a linear output layer over the vocabulary. The model is trained on normal sequences with cross-entropy loss for 5 epochs, with up to 2 million randomly sampled (context, target) pairs per dataset for tractable training time. At test time, each window is scored by the mean cross-entropy of its next-template predictions; higher mean cross-entropy indicates a less predictable (more anomalous) window. Note that this differs from the original DeepLog scoring (top-K matching); we discuss the implications in Section 5.1.
+
+**Metrics.** We report ROC-AUC and best-threshold F1 throughout. ROC-AUC measures ranking quality and is threshold-independent. Best-threshold F1 sweeps all possible thresholds and reports the maximum F1; this gives an optimistic upper bound on the F1 a deployed system could achieve with perfect threshold tuning, but is the standard reporting convention for log AD benchmarks. For Stage 1 (drift detection), we additionally report the correlation between the MMD time series and the per-window true anomaly fraction, as a diagnostic of how much of the MMD signal is anomaly-driven versus distribution-shift-driven.
+
+All experiments are run with random seed 42 for reproducibility.
 
 ---
 
