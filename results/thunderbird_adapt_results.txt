@@ -1,0 +1,25 @@
+THUNDERBIRD DriftGuard Stage 2: selective replay adaptation
+============================================================
+Drift start idx:       3500
+Adapt prefix size:     14574
+Drifted-normal kept:   7287 (bottom 50% by recon error)
+Replay buffer:         7287
+Epochs / batch / lr:   10 / 16 / 0.0001
+
+Pre-drift  (anomaly rate 62.23%)
+  AUC: 0.8479  ->  0.4361
+  F1:  0.8701  ->  0.8195
+  P:   0.8492  ->  0.6960
+  R:   0.8921  ->  0.9963
+
+Drift (held out)  (anomaly rate 75.71%)
+  AUC: 0.8676  ->  0.6155
+  F1:  0.9181  ->  0.9054
+  P:   0.8492  ->  0.8305
+  R:   0.9992  ->  0.9952
+
+Full test  (anomaly rate 65.44%)
+  AUC: 0.8412  ->  0.4635
+  F1:  0.8684  ->  0.8327
+  P:   0.8459  ->  0.7162
+  R:   0.8921  ->  0.9946

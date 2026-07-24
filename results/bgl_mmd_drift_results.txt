@@ -3,12 +3,12 @@ BGL MMD drift detection (Stage 1 of DriftGuard)
 Reference size:        500
 Detection window size: 500
 Stride:                100
-Bandwidth sigma^2:     30.6521
+Bandwidth sigma^2:     58.3423
 Permutations:          200
 Target false alarm:    0.01
-Threshold:             3.6824e-03
+Threshold:             3.5643e-03
 
 Detection windows: 90
-Alarms:            78  (86.67%)
+Alarms:            82  (91.11%)
 First drift idx:   300
-Corr(MMD, anomaly frac): +0.417
+Corr(MMD, anomaly frac): +0.310

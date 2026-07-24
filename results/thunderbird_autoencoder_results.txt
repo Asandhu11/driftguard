@@ -1,0 +1,14 @@
+THUNDERBIRD Autoencoder Anomaly Detection
+=======================================================
+Train:        113,966 normal samples
+Test:         39,935 (26,133 anomalous, 65.44%)
+Input dim:    1753
+Architecture: 1753 -> 256 -> 64 -> 16 -> 64 -> 256 -> 1753
+Epochs:       20
+
+Metrics:
+  ROC-AUC:    0.8412
+  Best F1:    0.8684
+  Precision:  0.8459
+  Recall:     0.8921
+  Threshold:  0.008505

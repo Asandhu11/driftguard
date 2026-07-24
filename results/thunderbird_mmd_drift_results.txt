@@ -1,0 +1,14 @@
+THUNDERBIRD MMD drift detection (Stage 1 of DriftGuard)
+============================================================
+Reference size:        500
+Detection window size: 500
+Stride:                100
+Bandwidth sigma^2:     40.9793
+Permutations:          200
+Target false alarm:    0.01
+Threshold:             3.8782e-03
+
+Detection windows: 395
+Alarms:            395  (100.00%)
+First drift idx:   0
+Corr(MMD, anomaly frac): +0.750

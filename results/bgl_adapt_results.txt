@@ -2,24 +2,24 @@ BGL DriftGuard Stage 2: selective replay adaptation
 ============================================================
 Drift start idx:       3500
 Adapt prefix size:     2370
-Drifted-normal kept:   711 (bottom 30% by recon error)
-Replay buffer:         2133
-Epochs / batch / lr:   5 / 16 / 0.0001
+Drifted-normal kept:   1185 (bottom 50% by recon error)
+Replay buffer:         1185
+Epochs / batch / lr:   10 / 16 / 0.0001
 
 Pre-drift  (anomaly rate 1.37%)
-  AUC: 0.9961  ->  0.9959
-  F1:  0.8222  ->  0.8132
-  P:   0.8810  ->  0.8605
-  R:   0.7708  ->  0.7708
+  AUC: 0.9787  ->  0.9718
+  F1:  0.4872  ->  0.3938
+  P:   0.3519  ->  0.2621
+  R:   0.7917  ->  0.7917
 
 Drift (held out)  (anomaly rate 9.02%)
-  AUC: 0.5961  ->  0.5662
-  F1:  0.4147  ->  0.4209
-  P:   0.4091  ->  0.4418
-  R:   0.4206  ->  0.4019
+  AUC: 0.5662  ->  0.5197
+  F1:  0.4085  ->  0.4045
+  P:   0.4000  ->  0.5070
+  R:   0.4174  ->  0.3364
 
 Full test  (anomaly rate 8.66%)
-  AUC: 0.7354  ->  0.7166
-  F1:  0.3467  ->  0.3336
-  P:   0.4857  ->  0.5222
-  R:   0.2696  ->  0.2451
+  AUC: 0.7184  ->  0.6903
+  F1:  0.3539  ->  0.2976
+  P:   0.4145  ->  0.5059
+  R:   0.3088  ->  0.2108
