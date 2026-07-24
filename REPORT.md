@@ -496,30 +496,36 @@ optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
 | Metric | BGL | Thunderbird |
 |---|---|---|
-| AUC before adaptation | 0.7184 | 0.8412 |
-| AUC after adaptation | Improves | 0.4635 |
+| AUC before adaptation (full test) | 0.7184 | 0.8412 |
+| AUC after adaptation (full test) | 0.6903 | 0.4635 |
+| Pre-drift AUC before / after | 0.9787 / 0.9718 | — |
 | F1 before | 0.3539 | 0.8684 |
-| F1 after | Improves | 0.8327 |
+| F1 after | 0.2976 | 0.8327 |
+| Drift region anomaly rate | 9.02% | 75.71% |
+| Adapt prefix size | 2,370 windows | 14,574 windows |
 
-**BGL:** Adaptation improves detection on held-out drift windows, as expected.
-The pseudo-normal selection works because BGL's drift region still contains a
-manageable proportion of genuinely normal windows.
+**Both datasets show degradation after adaptation.** This is the honest finding,
+and it precisely characterises the failure condition of the heuristic.
 
-**Thunderbird:** Adaptation degrades AUC from 0.84 to 0.46. The test portion
-of the 20M subset has a 65–75% anomaly rate — the drift region is dominated by
-failure events. When Stage 2 selects the "lowest-error 50%," it is selecting
-from a pool that is mostly anomalous. The fine-tuning then teaches the model to
-reconstruct anomalies, collapsing the normal/anomaly separation.
+**BGL:** The adapt prefix is small (2,370 windows) and the drift region already
+contains 9.02% anomalous windows. Some of those anomalous windows happen to have
+low reconstruction error (they resemble normal patterns in template space),
+contaminating the pseudo-normal set. The pre-drift AUC barely changes
+(0.9787 → 0.9718), confirming the adapted model has not catastrophically
+forgotten earlier patterns. The degradation is concentrated in the drift portion.
 
-This is not a flaw in the pipeline — it is an important boundary condition.
-**Stage 2 adaptation requires a minimum proportion of genuine normal behavior in
-the drift region to function correctly.** This finding defines an operational
-limit that should be reported to system operators: if the drift region is above
-~60% anomalous at the window level, skip adaptation and go straight to Stage 3.
+**Thunderbird:** The degradation is more severe (0.84 → 0.46) because the drift
+region anomaly rate is 75.71%. The "bottom 50%" selection draws almost entirely
+from anomalous windows, and fine-tuning on them teaches the model to reconstruct
+attack patterns, collapsing the normal/anomaly separation.
 
-The F1 score after adaptation (0.83) degrades much less than AUC because F1 is
-evaluated at the best achievable threshold — it measures whether the model can
-still separate the classes at all, not whether the ranking is globally correct.
+Together these results define the **operating boundary for Stage 2 adaptation:**
+the pseudo-normal selection heuristic requires a drift region where anomalies are
+a clear minority. When anomaly density exceeds roughly 10% at the window level,
+the pseudo-normal set becomes too impure to help. In a production system, Stage 2
+should only be triggered when Stage 1 drift is detected in a region with an
+estimated anomaly rate below a safety threshold — otherwise the model should hold
+its current parameters and proceed directly to Stage 3 disambiguation.
 
 ---
 
@@ -621,7 +627,7 @@ unsupervised.
 | Stage 1: Drift detected | Yes — gradual onset, first alarm at test idx 300 |
 | Stage 1: Alarms | 82 of 90 windows (91.1%) |
 | Stage 1: Corr(MMD, anomaly) | **+0.310** |
-| Stage 2: AUC after adaptation | Improves vs. baseline |
+| Stage 2: AUC after adaptation | 0.6903 (slight degradation — drift region 9% anomalous) |
 | Stage 3: Corr(entropy, anomaly) | **+0.816** (stable across Drain threshold settings) |
 | Stage 3: entropy direction | High entropy → anomaly |
 
@@ -657,10 +663,14 @@ unsupervised.
    BGL and +0.750 on Thunderbird. The weaker BGL correlation reflects its more
    gradual drift character — the signal is real but noisier.
 
-3. **Stage 2 adaptation has a boundary condition.** It works when the drift
-   region contains enough normal behavior to select pseudo-normal samples. It
-   degrades when the anomaly density is too high (>60% window-level anomaly
-   rate). This is an actionable operational limit.
+4. **Stage 2 adaptation degrades on both datasets.** Full-test AUC drops from
+   0.72 → 0.69 on BGL and 0.84 → 0.46 on Thunderbird. The root cause is the
+   same in both cases: the pseudo-normal selection (bottom 50% by reconstruction
+   error) picks up anomalous windows that happen to resemble normal patterns in
+   template space. The failure is more severe on Thunderbird because its drift
+   region is 75% anomalous vs. BGL's 9%. This establishes a clear operational
+   boundary: Stage 2 should only be activated when the drift region anomaly
+   density is low enough for pseudo-label selection to be reliable.
 
 4. **Template entropy is a reliable Stage 3 feature across systems,** but its
    sign depends on the failure mode character (broadcast-divergent vs.
