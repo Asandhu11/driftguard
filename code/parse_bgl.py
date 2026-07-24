@@ -45,9 +45,22 @@ def main():
         print(f"ERROR: BGL.log not found at {LOG_FILE}")
         return
 
-    # Configure Drain3 (default settings work well on BGL).
+    # Configure Drain3 for BGL (matches LogHub preprocessing + sim_th).
+    from drain3.masking import MaskingInstruction
+
     config = TemplateMinerConfig()
     config.profiling_enabled = False
+    # Similarity threshold: LogHub uses 0.5 for BGL (Drain3 default is 0.4).
+    config.drain_sim_th = 0.5
+    config.drain_depth = 4
+    # Mask common variable patterns so they don't create spurious templates.
+    # Order matters: hex before decimal (hex is a superset pattern).
+    config.masking_instructions = [
+        MaskingInstruction(r"(0x)[0-9a-fA-F]+", "HEX"),
+        MaskingInstruction(r"\b[0-9a-fA-F]{8,}\b", "HEX"),
+        MaskingInstruction(r"\b\d+\.\d+\.\d+\.\d+\b", "IP"),
+        MaskingInstruction(r"\b\d+\b", "NUM"),
+    ]
     miner = TemplateMiner(config=config)
 
     print(f"Reading: {LOG_FILE}")
